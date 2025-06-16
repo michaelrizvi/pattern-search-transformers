@@ -1,3 +1,5 @@
+Here’s the adapted YAML with separate `train_dataset`, `val_dataset`, and `test_dataset`:
+
 defaults:
   - hydra: default
   - _self_
@@ -7,22 +9,84 @@ seed: 1
 
 logger:
   _target_: lightning.pytorch.loggers.WandbLogger
-  entity: # Add your wandb entity here
-  project: # Add your wandb project here
+  entity:  # Add your wandb entity here
+  project:  # Add your wandb project here
   name: ${now:%Y-%m-%d}_${now:%H-%M-%S}
   save_dir: ${save_dir}
   offline: False
   tags: null
 
 trainer:
-  max_epochs: 10
+  max_epochs: 1
   enable_progress_bar: True
   log_every_n_steps: 1
 
-#overwrite with your own class name and attributes
+model:
+  _target_: transformer.DecoderOnlyTransformer
+  vocab_size: 2
+  d_model: 512
+  n_layers: 6
+  n_heads: 8
+  d_ff: 2048
+  max_len: 128
 
-datamodule: null
+task:
+  _target_: state_tracking_task.StateTrackingTask
+  model: ${model}
+  lr: 1e-4
+  pad_token_id: 100
+  sep_token_id: 99
 
-task: null
+train_dataset:
+  _target_: state_tracking_data.StateTrackingDataset
+  n_samples: 100
+  seq_len: 6
+  vocab_size: 2
+  ground_truth_fn:
+    _partial_: true
+    _target_: state_tracking_data.parity_fn
+    return_intermediates: true
 
-callbacks: null
+val_dataset:
+  _target_: state_tracking_data.StateTrackingDataset
+  n_samples: 20
+  seq_len: 6
+  vocab_size: 2
+  ground_truth_fn:
+    _partial_: true
+    _target_: state_tracking_data.parity_fn
+    return_intermediates: true
+
+test_dataset:
+  _target_: state_tracking_data.StateTrackingDataset
+  n_samples: 20
+  seq_len: 6
+  vocab_size: 2
+  ground_truth_fn:
+    _partial_: true
+    _target_: state_tracking_data.parity_fn
+    return_intermediates: true
+
+datamodule:
+  _target_: state_tracking_data.StateTrackingDataModule
+  train_dataset: ${train_dataset}
+  val_dataset: ${val_dataset}
+  test_dataset: ${test_dataset}
+  batch_size: 2
+  num_workers: 0
+
+callbacks:
+  early_stopping:
+    _target_: lightning.pytorch.callbacks.EarlyStopping
+    monitor: val_loss
+    patience: 1000
+    mode: min
+    verbose: True
+  model_checkpoint:
+    _target_: lightning.pytorch.callbacks.ModelCheckpoint
+    monitor: val_loss
+    mode: min
+    save_top_k: 1
+    filename: "{epoch:02d}-{val_loss:.2f}"
+    dirpath: ${save_dir}
+    verbose: True
