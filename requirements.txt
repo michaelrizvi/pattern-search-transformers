@@ -12,3 +12,4 @@ beartype
 submitit
 hydra-submitit-launcher
 pytest
+transformers

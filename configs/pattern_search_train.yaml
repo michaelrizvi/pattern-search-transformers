@@ -1,0 +1,98 @@
+defaults:
+  - hydra: default
+  - _self_
+
+save_dir: "logs/pattern_search/"
+seed: 42
+
+logger:
+  _target_: lightning.pytorch.loggers.WandbLogger
+  entity: null  # Add your wandb entity here
+  project: "pattern-search-transformer"  # Add your wandb project here
+  name: "pattern_search_${now:%Y-%m-%d}_${now:%H-%M-%S}"
+  save_dir: ${save_dir}
+  offline: False
+  tags: ["pattern_search", "transformer", "state_tracking"]
+
+trainer:
+  max_epochs: 50
+  enable_progress_bar: True
+  log_every_n_steps: 1
+  check_val_every_n_epoch: 5
+  accelerator: "auto"
+  devices: 1
+  limit_train_batches: null
+  limit_val_batches: null
+
+# Small transformer model for PatternSearch (derivative-free optimization is slow)
+model:
+  _target_: transformer.DecoderOnlyTransformer
+  vocab_size: 102  # 0-1 (input) + 99 (sep) + 100 (pad) + output tokens
+  d_model: 64
+  n_layers: 2
+  n_heads: 4
+  d_ff: 256
+  max_len: 128
+  dropout: 0.1
+
+task:
+  _target_: pattern_search_task.PatternSearchTask
+  model: ${model}
+  pad_token_id: 100
+  sep_token_id: 99
+  pattern_search_radius: 0.1  # Initial search radius for PatternSearch
+
+# Small datasets for faster PatternSearch optimization
+train_dataset:
+  _target_: state_tracking_data.StateTrackingDataset
+  n_samples: 200
+  seq_len: 8
+  vocab_size: 2
+  ground_truth_fn:
+    _partial_: true
+    _target_: state_tracking_data.parity_fn
+    return_intermediates: true
+
+val_dataset:
+  _target_: state_tracking_data.StateTrackingDataset
+  n_samples: 50
+  seq_len: 8
+  vocab_size: 2
+  ground_truth_fn:
+    _partial_: true
+    _target_: state_tracking_data.parity_fn
+    return_intermediates: true
+
+test_dataset:
+  _target_: state_tracking_data.StateTrackingDataset
+  n_samples: 50
+  seq_len: 8
+  vocab_size: 2
+  ground_truth_fn:
+    _partial_: true
+    _target_: state_tracking_data.parity_fn
+    return_intermediates: true
+
+datamodule:
+  _target_: state_tracking_data.StateTrackingDataModule
+  train_dataset: ${train_dataset}
+  val_dataset: ${val_dataset}
+  test_dataset: ${test_dataset}
+  batch_size: 4
+  num_workers: 0
+
+callbacks:
+  early_stopping:
+    _target_: lightning.pytorch.callbacks.EarlyStopping
+    monitor: val_loss
+    patience: 10
+    mode: min
+    verbose: True
+  model_checkpoint:
+    _target_: lightning.pytorch.callbacks.ModelCheckpoint
+    monitor: val_loss
+    mode: min
+    save_top_k: 3
+    filename: "pattern_search_{epoch:02d}_{val_loss:.3f}_{val_accuracy:.3f}"
+    dirpath: ${save_dir}/checkpoints
+    verbose: True
