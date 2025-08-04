@@ -1,6 +1,15 @@
-# 🚀 Your Research Project Template
+# 🧠 Pattern-Search Transformers
 
-This template provides tools and best practices to quick-start your research project with a fully functional environment and backbones for your codebase. It is based on my own experience and the experience of others and aims to help you get started effectively. Feel free to use this template and modify it to suit your needs. The template includes the following:
+This research project explores **derivative-free optimization of transformer models** using the PatternSearch algorithm. Instead of traditional gradient-based training (Adam, SGD), this project investigates whether transformers can be effectively trained through systematic parameter perturbation and pattern-based search strategies.
+
+## 🎯 Project Overview
+
+This project implements and evaluates PatternSearch optimization for training small transformer models on sequence learning tasks like state tracking and membership inference. Key research questions include:
+- Can derivative-free methods effectively train neural language models?
+- How does PatternSearch compare to gradient-based optimization in terms of convergence and final performance?
+- What are the computational trade-offs between gradient-free and gradient-based training?
+
+The implementation is built on top of a robust research framework that includes:
 
 - ⚡ [Pytorch Lightning](https://lightning.ai/docs/pytorch/stable/): A framework to organize your deep learning research.
 - 🔧 [Hydra](https://hydra.cc/): A powerful configuration management system.
@@ -13,18 +22,28 @@ Additional utilities:
 - Ready-to-use Jupyter notebook in `report/plots/notebook.ipynb` for making reproducible Seaborn plots, pulling data directly from your WandB project.
 - Pre-implemented VScode debugger config file in `.vscode/launch.json` for debugging your code.
 
----
+## 🚀 Key Components
 
-## 🛠️ Tools Overview
+### PatternSearch Optimizer (`src/optimizer.py`)
+- **Derivative-free optimization** - Works without computing gradients
+- **Parameter perturbation** - Systematically tests small parameter changes
+- **Adaptive search radius** - Shrinks search space when no improvements found
+- **Closure-based evaluation** - Requires loss function closure for parameter evaluation
 
-### ⚡ PyTorch Lightning
-This template is built around the PyTorch Lightning framework. You are expected to organize your modules in the `src` folder:
-- `src/model.py`: Define your model architecture and the `forward` function. Each model should be a class inheriting from `pl.LightningModule`.
-- `src/dataset.py`: Define your datasets (`torch.utils.data.Dataset`) and datamodules (`pl.LightningDataModule`).
-- `src/task.py`: Implement your global forward function, loss function, train and evaluation steps, and metrics. Add custom callbacks if needed.
-- `src/train.py`: The main script. It loads the configuration file, instantiates components, trains the model, and saves logs and outputs.
+### Transformer Architecture (`src/transformer.py`)
+- Decoder-only transformer optimized for PatternSearch training
+- Causal self-attention with configurable model dimensions
+- Small-scale by default (2 layers, 4 heads, 64 dimensions) for efficient derivative-free training
 
-Learn more about PyTorch Lightning [here](https://lightning.ai/docs/pytorch/stable/).
+### Tasks & Datasets
+- **State Tracking** (`src/state_tracking_task.py`, `src/state_tracking_data.py`) - Sequence-to-sequence learning with intermediate state prediction
+- **Membership Task** (`src/membership_task.py`) - Learning set membership patterns
+- **SCAN Task** (`src/scan_task.py`, `src/scan_data.py`) - Compositional sequence-to-sequence learning
+
+### Training Integration (`src/pattern_search_task.py`)
+- PyTorch Lightning module with PatternSearch optimizer integration
+- Custom optimizer step handling for closure-based optimization
+- Proper loss masking for variable-length sequences
 
 ---
 
@@ -85,34 +104,88 @@ Edit `configs/train.yaml` with your WandB entity and project information.
 
 ## ▶️ Usage
 
-To run your code, simply execute the `train.py` script. Pass hyperparameters as arguments:
-```bash
-python train.py seed=0 my_custom_argument=config_1
-```
-This will launch a training run with the specified hyperparameters.
+### Quick Start with PatternSearch Training
 
-For parallel jobs on a cluster, use Hydra’s `--multirun` feature:
+1. **Basic PatternSearch training**:
 ```bash
-python train.py --multirun seed=0,1,2,3,4 my_custom_argument=config_1,config_2
+cd src
+python train.py --config-name=pattern_search_train
 ```
 
-If using Slurm, the default launcher config `hydra/launcher/slurm.yaml` based on the `submitit` plugin for Hydra will be used.
+2. **Quick test run** (2 epochs, limited batches):
+```bash
+cd src  
+python train.py --config-name=pattern_search_train \
+    trainer.max_epochs=2 \
+    trainer.limit_train_batches=3 \
+    trainer.limit_val_batches=2 \
+    logger.offline=True
+```
 
-Learn more about Hydra [here](https://hydra.cc/docs/intro).
+3. **Custom configuration**:
+```bash
+cd src
+python train.py --config-name=pattern_search_train \
+    trainer.max_epochs=10 \
+    model.d_model=128 \
+    model.n_layers=4 \
+    datamodule.batch_size=8 \
+    task.pattern_search_radius=0.1
+```
+
+### Running Different Tasks
+
+- **State Tracking**: Use default `pattern_search_train.yaml` config
+- **Membership Task**: Modify config to use membership dataset
+- **SCAN Task**: Modify config to use SCAN dataset
+
+### Performance Notes
+
+⚠️ **PatternSearch is computationally intensive** - Each optimization step requires multiple forward passes
+- Start with small models (d_model=64, n_layers=2) and datasets (n_samples=200)
+- Monitor training progress with WandB logging
+- Use offline mode for testing: `logger.offline=True`
+
+For traditional gradient-based training comparison, use the standard `train.yaml` config.
 
 ---
 
-## 🤝 Contribution
+## 📊 Research Results & Analysis
 
-All kinds of contributions are welcome! You can add tools, improve practices, or suggest trade-offs.
-👉 If you add external dependencies, make sure to update the `requirements.txt` file.
+The repository includes tools for analyzing training results:
+- **WandB Integration**: Experiment tracking with hyperparameter logging
+- **Jupyter Notebooks**: Ready-to-use analysis in `report/plots/notebook.ipynb`
+- **Comparison Framework**: Compare PatternSearch vs gradient-based training
 
-This template is directly inspired by our project [PrequentialCode](https://github.com/3rdCore/PrequentialCode), made possible by Eric Elmoznino, and Tejas Kasetty :
+Early results show PatternSearch can successfully train small transformers, though with different convergence characteristics compared to gradient-based methods.
 
-<a href="https://github.com/3rdcore/PrequentialCode/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=3rdcore/PrequentialCode&max=3" />
-</a>
+## 📁 Project Structure
 
----
+```
+src/
+├── optimizer.py              # PatternSearch implementation
+├── transformer.py           # Decoder-only transformer architecture
+├── pattern_search_task.py   # Lightning module for PatternSearch training
+├── *_data.py               # Dataset implementations
+├── *_task.py               # Task-specific training modules
+└── train.py                # Main training script
 
-Feel free to dive in and start your project! 🌟
+configs/
+├── pattern_search_train.yaml  # PatternSearch training config
+└── train.yaml                 # Standard gradient-based config
+
+tests/
+└── test_pattern_search.py    # Functionality tests
+```
+
+## 🤝 Contributing
+
+This project explores novel optimization approaches for neural language models. Contributions are welcome in:
+- New derivative-free optimization algorithms
+- Additional sequence learning tasks and datasets
+- Performance benchmarking and analysis
+- Documentation and reproducibility improvements
+
+## 📚 References & Related Work
+
+This research builds on derivative-free optimization literature and explores its application to modern deep learning architectures. The implementation framework is inspired by best practices from the PyTorch Lightning and Hydra communities.
