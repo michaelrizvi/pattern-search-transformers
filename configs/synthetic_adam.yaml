@@ -1,0 +1,106 @@
+defaults:
+  - hydra: default
+  - _self_
+
+save_dir: "logs/synthetic_sequence_adam/"
+seed: 42
+
+logger:
+  _target_: lightning.pytorch.loggers.WandbLogger
+  entity: null  # Add your wandb entity here
+  project: "adam-synthetic-sequences"  # Add your wandb project here
+  name: "synthetic_seq_adam_${now:%Y-%m-%d}_${now:%H-%M-%S}"
+  save_dir: ${save_dir}
+  offline: True  # Set to False if you want to log to wandb online
+  tags: ["adam", "transformer", "synthetic_sequences", "sort"]
+
+trainer:
+  max_epochs: 20
+  enable_progress_bar: True
+  log_every_n_steps: 1
+  check_val_every_n_epoch: 2
+  accelerator: "auto"
+  devices: 1
+  limit_train_batches: null
+  limit_val_batches: null
+
+# Same transformer model as PatternSearch for fair comparison
+model:
+  _target_: transformer.DecoderOnlyTransformer
+  vocab_size: 110  # 0-19 (vocab) + 102 (sep) + 103 (pad) + extra room
+  d_model: 64
+  n_layers: 2
+  n_heads: 4
+  d_ff: 256
+  max_len: 64
+  dropout: 0.1
+
+task:
+  _target_: adam_task.AdamTask
+  model: ${model}
+  pad_token_id: 103
+  sep_token_id: 102
+  learning_rate: 1e-3  # Adam learning rate
+  weight_decay: 0.0    # Adam weight decay
+
+# Same datasets as PatternSearch for fair comparison
+train_dataset:
+  _target_: synthetic_seq_data.SyntheticSequenceDataset
+  n_samples: 100
+  min_seq_len: 3
+  max_seq_len: 6
+  vocab_size: 20  # Use integers 0-19
+  ground_truth_fn:
+    _partial_: true
+    _target_: synthetic_seq_data.sort_fn
+  sep_token: 102
+  pad_token: 103
+
+val_dataset:
+  _target_: synthetic_seq_data.SyntheticSequenceDataset
+  n_samples: 30
+  min_seq_len: 3
+  max_seq_len: 6
+  vocab_size: 20  # Use integers 0-19
+  ground_truth_fn:
+    _partial_: true
+    _target_: synthetic_seq_data.sort_fn
+  sep_token: 102
+  pad_token: 103
+
+test_dataset:
+  _target_: synthetic_seq_data.SyntheticSequenceDataset
+  n_samples: 30
+  min_seq_len: 3
+  max_seq_len: 6
+  vocab_size: 20  # Use integers 0-19
+  ground_truth_fn:
+    _partial_: true
+    _target_: synthetic_seq_data.sort_fn
+  sep_token: 102
+  pad_token: 103
+
+datamodule:
+  _target_: synthetic_seq_data.SyntheticSequenceDataModule
+  train_dataset: ${train_dataset}
+  val_dataset: ${val_dataset}
+  test_dataset: ${test_dataset}
+  batch_size: 8
+  num_workers: 0
+  enable_position_shifting: true  # Enable position shifting for length generalization
+
+callbacks:
+  early_stopping:
+    _target_: lightning.pytorch.callbacks.EarlyStopping
+    monitor: val_loss
+    patience: 5
+    mode: min
+    verbose: True
+  model_checkpoint:
+    _target_: lightning.pytorch.callbacks.ModelCheckpoint
+    monitor: val_loss
+    mode: min
+    save_top_k: 3
+    filename: "synthetic_seq_adam_{epoch:02d}_{val_loss:.3f}"
+    dirpath: ${save_dir}/checkpoints
+    verbose: True

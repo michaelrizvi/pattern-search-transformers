@@ -3,23 +3,24 @@ from lightning import LightningModule
 from torch import Tensor
 from typing import Any
 
-from optimizer import PatternSearch
 from transformer import DecoderOnlyTransformer
 
 
-class PatternSearchTask(LightningModule):
+class AdamTask(LightningModule):
     def __init__(
         self,
         model,
         pad_token_id: int = 100,
         sep_token_id: int = 99,
-        pattern_search_radius: float = 1.0,
+        learning_rate: float = 1e-3,
+        weight_decay: float = 0.0,
     ):
         super().__init__()
         self.model = model
         self.pad_token_id = pad_token_id
         self.sep_token_id = sep_token_id
-        self.pattern_search_radius = pattern_search_radius
+        self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
         self.save_hyperparameters(ignore=['model'])
         
     def forward(self, x: Tensor, position_ids: Tensor = None) -> Any:
@@ -137,21 +138,10 @@ class PatternSearchTask(LightningModule):
         return exact_matches.float().mean()  # Return proportion of sequences with exact match
 
     def configure_optimizers(self) -> Any:
-        """Configure PatternSearch optimizer."""
-        optimizer = PatternSearch(
+        """Configure Adam optimizer."""
+        optimizer = torch.optim.Adam(
             self.parameters(),
-            rho=0.05,  # SAM-style parameter for perturbation radius
-            adaptive=False
+            lr=self.learning_rate,
+            weight_decay=self.weight_decay
         )
-        # Set initial radius
-        optimizer.radius = self.pattern_search_radius
         return optimizer
-    
-    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
-        """Custom optimizer step for PatternSearch."""
-        def closure():
-            loss = optimizer_closure()
-            return loss
-        
-        # PatternSearch optimizer requires a closure
-        optimizer.step(closure)

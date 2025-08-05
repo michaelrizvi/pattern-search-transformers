@@ -62,9 +62,26 @@ class DecoderOnlyTransformer(nn.Module):
         self.ln_f = nn.LayerNorm(d_model)
         self.head = nn.Linear(d_model, vocab_size)
 
-    def forward(self, x):
+    def forward(self, x, position_ids=None):
         B, T = x.size()
-        x = self.token_emb(x) + self.pos_emb[:, :T, :]
+        
+        # Token embeddings
+        token_embeddings = self.token_emb(x)
+        
+        # Position embeddings with optional position_ids for shifting
+        if position_ids is not None:
+            # Use custom position indices for position shifting
+            position_embeddings = self.pos_emb[:, :self.pos_emb.size(1), :].expand(B, -1, -1)
+            position_embeddings = torch.gather(
+                position_embeddings, 
+                1, 
+                position_ids.unsqueeze(-1).expand(-1, -1, self.pos_emb.size(-1))
+            )
+        else:
+            # Standard sequential position embeddings
+            position_embeddings = self.pos_emb[:, :T, :]
+        
+        x = token_embeddings + position_embeddings
         x = self.blocks(x)
         x = self.ln_f(x)
         return self.head(x)
