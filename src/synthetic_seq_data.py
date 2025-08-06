@@ -72,45 +72,30 @@ class SyntheticSequenceDataset(Dataset):
         self.sep_token = sep_token
         self.pad_token = pad_token
 
-        self.sequences = self.gen_data(n_samples)
-
     def __len__(self) -> int:
         return self.n_samples
 
     def __getitem__(self, index) -> torch.Tensor:
-        return self.sequences[index]
+        # Generate a fresh sequence on-the-fly for each request
+        # 1) Sample sequence length uniformly from [min_seq_len, max_seq_len]
+        seq_len = torch.randint(self.min_seq_len, self.max_seq_len + 1, (1,)).item()
+        
+        # 2) Sample random sequence from vocab_size alphabet
+        input_seq = torch.randint(0, self.vocab_size, (seq_len,))
+        
+        # 3) Apply ground truth function to get output sequence
+        output_seq = self.ground_truth_fn(input_seq)
+        
+        # Create full sequence: [input] + [sep_token] + [output]
+        # Note: No padding here - that's handled in the collate function
+        full_seq = torch.cat([
+            input_seq,
+            torch.tensor([self.sep_token]),
+            output_seq
+        ])
+        
+        return full_seq
 
-    @torch.inference_mode()
-    def gen_data(self, n_samples: int) -> List[torch.Tensor]:
-        sequences = []
-        
-        for i in range(n_samples):
-            # 1) Sample sequence length uniformly from [min_seq_len, max_seq_len]
-            seq_len = torch.randint(self.min_seq_len, self.max_seq_len + 1, (1,)).item()
-            
-            # 2) Sample random sequence from vocab_size alphabet
-            input_seq = torch.randint(0, self.vocab_size, (seq_len,))
-            
-            # 3) Apply ground truth function to get output sequence
-            output_seq = self.ground_truth_fn(input_seq)
-            
-            # Create full sequence: [input] + [sep_token] + [output]
-            full_seq = torch.cat([
-                input_seq,
-                torch.tensor([self.sep_token]),
-                output_seq
-            ])
-            
-            sequences.append(full_seq)
-        
-        # Pad all sequences to the same length
-        max_len = max(len(seq) for seq in sequences)
-        padded_sequences = [
-            F.pad(seq, (0, max_len - len(seq)), value=self.pad_token) 
-            for seq in sequences
-        ]
-        
-        return padded_sequences
 
 
 class PositionShiftCollate:
@@ -127,21 +112,38 @@ class PositionShiftCollate:
 def position_shift_collate_fn(batch: List[torch.Tensor], max_positions: int = 512, training: bool = True) -> dict:
     """
     Custom collate function that implements position shifting for length generalization.
+    Handles variable-length sequences by padding them to the same length.
     
     This implements the mechanism from the paper: "at train time, we add random offsets 
     to position indices so that all position embeddings are trained. The offsets are 
     sampled uniformly at random in the range [0, N − |x|]"
     
     Args:
-        batch: List of sequences from the dataset
+        batch: List of variable-length sequences from the dataset
         max_positions: Maximum position embedding size (N in the paper)
         training: Whether we're in training mode (only shift during training)
     
     Returns:
         Dictionary with 'input_ids' and 'position_ids'
     """
+    # Find the maximum length in the batch for padding
+    max_len = max(len(seq) for seq in batch)
+    
+    # Get pad token from the first sequence (assumes all sequences use same pad token)
+    # We'll use 103 as default pad token if we can't infer it
+    pad_token = 103
+    
+    # Pad all sequences to the same length
+    padded_batch = []
+    for seq in batch:
+        if len(seq) < max_len:
+            padded_seq = F.pad(seq, (0, max_len - len(seq)), value=pad_token)
+        else:
+            padded_seq = seq
+        padded_batch.append(padded_seq)
+    
     # Stack batch into tensor: (batch_size, seq_len)
-    input_ids = torch.stack(batch)
+    input_ids = torch.stack(padded_batch)
     batch_size, seq_len = input_ids.shape
     
     if training and seq_len < max_positions:

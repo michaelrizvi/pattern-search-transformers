@@ -40,14 +40,8 @@ task:
   model: ${model}
   pad_token_id: 103
   sep_token_id: 102
-  optimizer:
-    _target_: torch.optim.AdamW
-    lr: 1e-5
-    weight_decay: 0.01
-  scheduler:
-    _target_: torch.optim.lr_scheduler.CosineAnnealingLR
-    T_max: 10000  # Total steps for cosine annealing
-    eta_min: 0.0
+  learning_rate: 1e-5  # AdamW learning rate
+  weight_decay: 0.01   # AdamW weight decay
 
 # Same datasets as PatternSearch for fair comparison
 train_dataset:

@@ -138,10 +138,24 @@ class AdamTask(LightningModule):
         return exact_matches.float().mean()  # Return proportion of sequences with exact match
 
     def configure_optimizers(self) -> Any:
-        """Configure Adam optimizer."""
-        optimizer = torch.optim.Adam(
+        """Configure AdamW optimizer with cosine annealing scheduler."""
+        optimizer = torch.optim.AdamW(
             self.parameters(),
             lr=self.learning_rate,
             weight_decay=self.weight_decay
         )
-        return optimizer
+        
+        # Cosine annealing scheduler from lr to 0
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=10000,  # Total steps for cosine annealing
+            eta_min=0.0   # Minimum learning rate
+        )
+        
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",  # Update every step
+            }
+        }
