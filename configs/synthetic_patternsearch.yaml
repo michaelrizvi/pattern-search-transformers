@@ -15,7 +15,7 @@ logger:
   tags: ["pattern_search", "transformer", "synthetic_sequences", "sort"]
 
 trainer:
-  max_epochs: 20
+  max_epochs: 1
   enable_progress_bar: True
   log_every_n_steps: 1
   check_val_every_n_epoch: 2
@@ -28,11 +28,11 @@ trainer:
 model:
   _target_: transformer.DecoderOnlyTransformer
   vocab_size: 110  # 0-19 (vocab) + 102 (sep) + 103 (pad) + extra room
-  d_model: 64
+  d_model: 1024
   n_layers: 2
-  n_heads: 4
-  d_ff: 256
-  max_len: 64
+  n_heads: 16
+  d_ff: 4096
+  max_len: 1024
   dropout: 0.1
 
 task:
@@ -45,9 +45,9 @@ task:
 # Small datasets for faster PatternSearch optimization
 train_dataset:
   _target_: synthetic_seq_data.SyntheticSequenceDataset
-  n_samples: 1000
-  min_seq_len: 3
-  max_seq_len: 6
+  n_samples: 5120000  # 10000 * 512
+  min_seq_len: 1
+  max_seq_len: 40
   vocab_size: 20  # Use integers 0-19
   ground_truth_fn:
     _partial_: true
@@ -58,8 +58,8 @@ train_dataset:
 val_dataset:
   _target_: synthetic_seq_data.SyntheticSequenceDataset
   n_samples: 100 
-  min_seq_len: 3
-  max_seq_len: 6
+  min_seq_len: 50
+  max_seq_len: 50
   vocab_size: 20  # Use integers 0-19
   ground_truth_fn:
     _partial_: true
@@ -69,9 +69,9 @@ val_dataset:
 
 test_dataset:
   _target_: synthetic_seq_data.SyntheticSequenceDataset
-  n_samples: 30
-  min_seq_len: 3
-  max_seq_len: 6
+  n_samples: 2560  # 5 * 512
+  min_seq_len: 50
+  max_seq_len: 50
   vocab_size: 20  # Use integers 0-19
   ground_truth_fn:
     _partial_: true
@@ -84,9 +84,9 @@ datamodule:
   train_dataset: ${train_dataset}
   val_dataset: ${val_dataset}
   test_dataset: ${test_dataset}
-  batch_size: 64 
+  batch_size: 512 
   num_workers: 7
-  max_positions: 64  # Should match model.max_len
+  max_positions: 1024  # Should match model.max_len
   enable_position_shifting: true  # Enable position shifting for length generalization
 
 callbacks:
