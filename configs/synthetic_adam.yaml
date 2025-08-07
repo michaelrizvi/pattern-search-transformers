@@ -18,7 +18,7 @@ trainer:
   max_epochs: 1
   enable_progress_bar: True
   log_every_n_steps: 1
-  check_val_every_n_epoch: 2
+  val_check_interval: 1000  # Validate every 1000 training steps
   accelerator: "auto"
   devices: 1
   limit_train_batches: null
@@ -46,7 +46,7 @@ task:
 # Same datasets as PatternSearch for fair comparison
 train_dataset:
   _target_: synthetic_seq_data.SyntheticSequenceDataset
-  n_samples: 5120000  # 10000 * 512
+  n_samples: 10000  # 10000 * 512
   min_seq_len: 1
   max_seq_len: 40
   vocab_size: 20  # Use integers 0-19
@@ -58,9 +58,9 @@ train_dataset:
 
 val_dataset:
   _target_: synthetic_seq_data.SyntheticSequenceDataset
-  n_samples: 30
-  min_seq_len: 50
-  max_seq_len: 50
+  n_samples: 2560
+  min_seq_len: 1
+  max_seq_len: 40
   vocab_size: 20  # Use integers 0-19
   ground_truth_fn:
     _partial_: true

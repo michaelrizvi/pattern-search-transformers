@@ -31,6 +31,9 @@ def train(cfg):
         **cfg.trainer,
     )
     trainer.fit(model=task, datamodule=dataset)
+    
+    # Test on longer sequences for length generalization
+    trainer.test(model=task, datamodule=dataset)
 
 
 if __name__ == "__main__":
