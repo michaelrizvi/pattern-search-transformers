@@ -121,18 +121,43 @@ class AdamTask(LightningModule):
         return torch.nn.functional.cross_entropy(filtered_logits, filtered_target)
     
     def calculate_exact_match(self, target: Tensor, logits: Tensor) -> Tensor:
-        """Calculate exact match - 1 if entire sequence is correct, 0 otherwise."""
+        """Calculate exact match - 1 if answer portion after separator is correct, 0 otherwise."""
         # Get predicted tokens - always argmax on last dimension
         preds = logits.argmax(dim=-1)
         
-        # Create mask to ignore pad tokens
-        mask = target != self.pad_token_id
+        batch_size = target.size(0)
+        exact_matches = []
         
-        # Check if all non-pad tokens match for each sequence
-        correct_per_token = (preds == target) | ~mask  # True for correct or pad tokens
-        exact_matches = correct_per_token.all(dim=-1)  # True if all tokens in sequence are correct
+        for i in range(batch_size):
+            # Find separator token position in target sequence
+            sep_positions = (target[i] == self.sep_token_id).nonzero(as_tuple=True)[0]
+            
+            if len(sep_positions) == 0:
+                # No separator found, fall back to full sequence match
+                mask = target[i] != self.pad_token_id
+                correct_per_token = (preds[i] == target[i]) | ~mask
+                exact_matches.append(correct_per_token.all().float())
+            else:
+                # Get position after separator - this is where the answer starts
+                sep_pos = sep_positions[0].item()
+                answer_start = sep_pos + 1
+                
+                # Only check tokens after separator (ignoring pad tokens)
+                answer_target = target[i, answer_start:]
+                answer_pred = preds[i, answer_start:]
+                
+                # Create mask for non-pad tokens in answer portion
+                answer_mask = answer_target != self.pad_token_id
+                
+                if answer_mask.sum() == 0:
+                    # No answer tokens to check
+                    exact_matches.append(torch.tensor(1.0))
+                else:
+                    # Check if all non-pad answer tokens match
+                    correct_answer_tokens = (answer_pred == answer_target) | ~answer_mask
+                    exact_matches.append(correct_answer_tokens.all().float())
         
-        return exact_matches.float().mean()  # Return proportion of sequences with exact match
+        return torch.stack(exact_matches).mean()  # Return proportion of sequences with exact answer match
 
     def configure_optimizers(self) -> Any:
         """Configure AdamW optimizer with cosine annealing scheduler."""
