@@ -1,0 +1,110 @@
+defaults:
+  - hydra: default
+  - _self_
+
+save_dir: "logs/synthetic_sequence_patternsearch_tiny/"
+seed: 42
+
+logger:
+  _target_: lightning.pytorch.loggers.WandbLogger
+  entity: null  # Add your wandb entity here
+  project: "pattern-search-synthetic-sequences"  # Add your wandb project here
+  name: "synthetic_seq_patternsearch_tiny_${now:%Y-%m-%d}_${now:%H-%M-%S}"
+  save_dir: ${save_dir}
+  offline: False  # Set to False if you want to log to wandb online
+  tags: ["pattern_search", "transformer", "synthetic_sequences", "sort", "tiny"]
+
+trainer:
+  max_epochs: 1
+  enable_progress_bar: True
+  log_every_n_steps: 1
+  val_check_interval: 100  # More frequent validation for tiny model
+  accelerator: "auto"
+  devices: 4  # Use 4 L40S GPUs
+  limit_train_batches: null
+  limit_val_batches: null
+
+# Tiny transformer model for sorting task - same as Adam config
+model:
+  _target_: transformer.DecoderOnlyTransformer
+  vocab_size: 110  # 0-9 (vocab) + 102 (sep) + 103 (pad) + extra room
+  d_model: 128 
+  n_layers: 2
+  n_heads: 4
+  d_ff: 256 
+  max_len: 128
+  dropout: 0.1
+
+task:
+  _target_: pattern_search_task.PatternSearchTask
+  model: ${model}
+  pad_token_id: 103
+  sep_token_id: 102
+  pattern_search_radius: 0.1  # Smaller radius for tiny model
+
+# Same toy dataset as Adam - train on length 1-5, test on length 5-10
+train_dataset:
+  _target_: synthetic_seq_data.SyntheticSequenceDataset
+  n_samples: 1300000
+  min_seq_len: 1
+  max_seq_len: 5
+  vocab_size: 10  # Use integers 0-9
+  ground_truth_fn:
+    _partial_: true
+    _target_: synthetic_seq_data.sort_fn
+  sep_token: 102
+  pad_token: 103
+
+val_dataset:
+  _target_: synthetic_seq_data.SyntheticSequenceDataset
+  n_samples: 1000
+  min_seq_len: 1
+  max_seq_len: 5 
+  vocab_size: 10  # Use integers 0-9
+  ground_truth_fn:
+    _partial_: true
+    _target_: synthetic_seq_data.sort_fn
+  sep_token: 102
+  pad_token: 103
+
+test_dataset:
+  _target_: synthetic_seq_data.SyntheticSequenceDataset
+  n_samples: 1000
+  min_seq_len: 5 
+  max_seq_len: 10 
+  vocab_size: 10  # Use integers 0-9
+  ground_truth_fn:
+    _partial_: true
+    _target_: synthetic_seq_data.sort_fn
+  sep_token: 102
+  pad_token: 103
+
+datamodule:
+  _target_: synthetic_seq_data.SyntheticSequenceDataModule
+  train_dataset: ${train_dataset}
+  val_dataset: ${val_dataset}
+  test_dataset: ${test_dataset}
+  batch_size: 512  # Same as Adam config
+  num_workers: 8   # More workers for cluster
+  max_positions: 128  # Should match model.max_len
+  enable_position_shifting: true  # Enable position shifting for length generalization
+
+callbacks:
+  early_stopping:
+    _target_: lightning.pytorch.callbacks.EarlyStopping
+    monitor: val_exact_match
+    min_delta: 0.001
+    patience: 5
+    mode: max
+    verbose: True
+    stopping_threshold: 0.995  # Stop when validation accuracy reaches 99.5%
+  model_checkpoint:
+    _target_: lightning.pytorch.callbacks.ModelCheckpoint
+    monitor: val_exact_match
+    mode: max
+    save_top_k: 1
+    save_last: False
+    filename: "synthetic_seq_patternsearch_tiny_{epoch:02d}_{val_exact_match:.3f}"
+    dirpath: ${save_dir}/checkpoints
+    verbose: True
+    auto_insert_metric_name: False

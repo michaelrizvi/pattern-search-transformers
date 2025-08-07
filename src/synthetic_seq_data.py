@@ -38,6 +38,34 @@ def reverse_fn(sequence: torch.Tensor) -> torch.Tensor:
     return torch.flip(sequence, dims=[0])
 
 
+def count_fn(sequence: torch.Tensor) -> torch.Tensor:
+    """
+    COUNT task: Given [min_val, max_val], count from min_val to max_val inclusive.
+    
+    Args:
+        sequence: A tensor of length 2: [min_val, max_val]
+    
+    Returns:
+        Tensor counting from min_val to max_val inclusive
+        
+    Examples:
+        >>> count_fn(torch.tensor([2, 5]))  # tensor([2, 3, 4, 5])
+        >>> count_fn(torch.tensor([7, 9]))  # tensor([7, 8, 9])
+        >>> count_fn(torch.tensor([3, 3]))  # tensor([3])
+    """
+    if len(sequence) != 2:
+        raise ValueError(f"COUNT task expects sequence of length 2, got {len(sequence)}")
+    
+    min_val, max_val = sequence[0].item(), sequence[1].item()
+    
+    # Handle edge case where min > max
+    if min_val > max_val:
+        return torch.tensor([], dtype=sequence.dtype)
+    
+    # Count from min_val to max_val inclusive
+    return torch.arange(min_val, max_val + 1, dtype=sequence.dtype)
+
+
 class SyntheticSequenceDataset(Dataset):
     """
     Dataset for synthetic sequence-to-sequence tasks with variable length inputs.
@@ -88,6 +116,65 @@ class SyntheticSequenceDataset(Dataset):
         
         # Create full sequence: [input] + [sep_token] + [output]
         # Note: No padding here - that's handled in the collate function
+        full_seq = torch.cat([
+            input_seq,
+            torch.tensor([self.sep_token]),
+            output_seq
+        ])
+        
+        return full_seq
+
+
+class CountSequenceDataset(Dataset):
+    """
+    Dataset for COUNT task: given [min_val, max_val], generate sequence from min to max.
+    
+    This dataset generates sequences of the form: [min_val, max_val] + [sep_token] + [min_val, min_val+1, ..., max_val]
+    For next-token prediction training, where the model learns to count from min to max.
+    
+    Example:
+    Input: [2, 5]
+    Output: [2, 3, 4, 5] 
+    Full sequence: [2, 5, 102, 2, 3, 4, 5]  (102 is separator '>')
+    """
+    
+    def __init__(
+        self,
+        n_samples: int,
+        min_range_size: int = 1,  # Minimum size of counting range (max - min)
+        max_range_size: int = 10, # Maximum size of counting range (max - min)
+        vocab_size: int = 20,
+        sep_token: int = 102,
+        pad_token: int = 103,
+    ):
+        super().__init__()
+        self.n_samples = n_samples
+        self.min_range_size = min_range_size
+        self.max_range_size = max_range_size
+        self.vocab_size = vocab_size
+        self.sep_token = sep_token
+        self.pad_token = pad_token
+
+    def __len__(self) -> int:
+        return self.n_samples
+
+    def __getitem__(self, index) -> torch.Tensor:
+        # Generate a fresh counting problem on-the-fly
+        # 1) Sample range size uniformly from [min_range_size, max_range_size]
+        range_size = torch.randint(self.min_range_size, self.max_range_size + 1, (1,)).item()
+        
+        # 2) Sample min_val ensuring max_val stays within vocab_size
+        max_possible_min = self.vocab_size - range_size
+        min_val = torch.randint(0, max_possible_min, (1,)).item()
+        max_val = min_val + range_size
+        
+        # 3) Create input sequence [min_val, max_val]
+        input_seq = torch.tensor([min_val, max_val])
+        
+        # 4) Apply count function to get output sequence
+        output_seq = count_fn(input_seq)
+        
+        # Create full sequence: [min_val, max_val] + [sep_token] + [output]
         full_seq = torch.cat([
             input_seq,
             torch.tensor([self.sep_token]),
