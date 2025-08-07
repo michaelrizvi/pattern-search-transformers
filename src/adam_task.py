@@ -122,11 +122,8 @@ class AdamTask(LightningModule):
     
     def calculate_exact_match(self, target: Tensor, logits: Tensor) -> Tensor:
         """Calculate exact match - 1 if entire sequence is correct, 0 otherwise."""
-        # Get predicted tokens
-        if logits.dim() > 2:
-            preds = logits.argmax(dim=-1)
-        else:
-            preds = logits.argmax(dim=-1).reshape(target.shape)
+        # Get predicted tokens - always argmax on last dimension
+        preds = logits.argmax(dim=-1)
         
         # Create mask to ignore pad tokens
         mask = target != self.pad_token_id
