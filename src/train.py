@@ -21,8 +21,14 @@ def train(cfg):
     )
 
     if logger:
-        logger.experiment.config.update(OmegaConf.to_container(cfg, resolve=True))
-        logger.experiment.config.update({"seed": cfg.seed})
+        try:
+            # Try to access the experiment config (works for online wandb)
+            if hasattr(logger.experiment, 'config'):
+                logger.experiment.config.update(OmegaConf.to_container(cfg, resolve=True))
+                logger.experiment.config.update({"seed": cfg.seed})
+        except (AttributeError, TypeError):
+            # Handle offline mode or other logger issues
+            print("Warning: Could not update logger config (likely offline mode)")
 
     trainer = Trainer(
         logger=logger,
