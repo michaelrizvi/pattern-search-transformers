@@ -27,11 +27,11 @@ trainer:
 # Tiny transformer model for counting task - same as Adam config
 model:
   _target_: transformer.DecoderOnlyTransformer
-  vocab_size: 110  # 0-9 (vocab) + 102 (sep) + 103 (pad) + extra room
-  d_model: 64
+  vocab_size: 64  # 0-9 (vocab) + 102 (sep) + 103 (pad) + extra room
+  d_model: 32 
   n_layers: 2
   n_heads: 4
-  d_ff: 256
+  d_ff: 64 
   max_len: 128
   dropout: 0.1
 
@@ -40,7 +40,7 @@ task:
   model: ${model}
   pad_token_id: 103
   sep_token_id: 102
-  pattern_search_radius: 1  # Small radius for tiny model and simple task
+  pattern_search_radius: 3  # Small radius for tiny model and simple task
 
 # Pre-generated COUNT dataset - same as Adam config
 train_dataset:
@@ -87,8 +87,8 @@ callbacks:
   early_stopping:
     _target_: lightning.pytorch.callbacks.EarlyStopping
     monitor: val_exact_match
-    min_delta: 0.001
-    patience: 3  # Shorter patience for PatternSearch
+    min_delta: 0.0  # No minimum improvement required
+    patience: 999999  # Effectively disable patience-based stopping
     mode: max
     verbose: True
     stopping_threshold: 0.99  # Stop when validation accuracy reaches 99%

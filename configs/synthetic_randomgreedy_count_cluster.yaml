@@ -2,54 +2,55 @@ defaults:
   - hydra: default
   - _self_
 
-save_dir: "logs/synthetic_count_adam/"
+save_dir: "logs/synthetic_count_randomgreedy/"
 seed: 42
 
 logger:
   _target_: lightning.pytorch.loggers.WandbLogger
   entity: null  # Add your wandb entity here
-  project: "adam-synthetic-sequences"  # Add your wandb project here
-  name: "synthetic_count_adam_${now:%Y-%m-%d}_${now:%H-%M-%S}"
+  project: "random-greedy-synthetic-sequences"  # Add your wandb project here
+  name: "synthetic_count_randomgreedy_${now:%Y-%m-%d}_${now:%H-%M-%S}"
   save_dir: ${save_dir}
   offline: False  # Set to False if you want to log to wandb online
-  tags: ["adam", "transformer", "synthetic_sequences", "count", "tiny"]
+  tags: ["random_greedy", "transformer", "synthetic_sequences", "count", "tiny"]
 
 trainer:
-  max_epochs: 100  # Multiple epochs for pre-generated data
+  max_epochs: 1000  # Many epochs like PatternSearch
   enable_progress_bar: True
   log_every_n_steps: 1
-  check_val_every_n_epoch: 20  # Validate every epoch
+  check_val_every_n_epoch: 20  # Validate every 20 epochs
   accelerator: "auto"
-  devices: 1
+  #devices: 4  # Use 4 GPUs for cluster like PatternSearch
   limit_train_batches: null
   limit_val_batches: null
 
-# Tiny transformer model for counting task
+# Tiny transformer model for counting task - same as PatternSearch
 model:
   _target_: transformer.DecoderOnlyTransformer
-  vocab_size: 64  # 0-9 (vocab) + 102 (sep) + 103 (pad) + extra room
-  d_model: 32 
+  vocab_size: 110  # 0-39 (vocab) + 102 (sep) + 103 (pad) + extra room
+  d_model: 64
   n_layers: 2
   n_heads: 4
-  d_ff: 64 
-  max_len: 64 
+  d_ff: 256
+  max_len: 128
   dropout: 0.1
 
 task:
-  _target_: adam_task.AdamTask
+  _target_: random_greedy_task.RandomGreedyTask
   model: ${model}
   pad_token_id: 103
   sep_token_id: 102
-  learning_rate: 1e-4  # Slightly higher LR for tiny model
-  weight_decay: 0.01   # AdamW weight decay
+  sigma: 0.1  # Small radius for tiny model and simple task
+  max_steps_per_sigma: 5000  # Reduce steps before sigma decay
+  decay_factor: 2.0  # Factor to reduce sigma by
 
-# Pre-generated COUNT dataset - train on ranges 1-5, test on ranges 5-9
+# Pre-generated COUNT dataset - same as PatternSearch
 train_dataset:
   _target_: synthetic_seq_data.PreGeneratedCountSequenceDataset
-  n_samples: 5000    # Smaller for pre-generated data
+  n_samples: 5000    # Same as PatternSearch
   min_range_size: 1    # Count ranges like [3,3] (single number)
   max_range_size: 20    # Count ranges like [2,7] (5 numbers)
-  vocab_size: 40       # Use integers 0-9
+  vocab_size: 40       # Use integers 0-39
   sep_token: 102
   pad_token: 103
   seed: 42            # Reproducible data
@@ -59,7 +60,7 @@ val_dataset:
   n_samples: 1000
   min_range_size: 1    # Same distribution as training
   max_range_size: 20    # Same distribution as training
-  vocab_size: 40       # Use integers 0-9
+  vocab_size: 40       # Use integers 0-39
   sep_token: 102
   pad_token: 103
   seed: 123           # Different seed for validation
@@ -69,7 +70,7 @@ test_dataset:
   n_samples: 1000
   min_range_size: 20    # Longer ranges for generalization test
   max_range_size: 39    # Test generalization to longer counting
-  vocab_size: 40       # Use integers 0-9
+  vocab_size: 40       # Use integers 0-39
   sep_token: 102
   pad_token: 103
   seed: 456           # Different seed for test
@@ -80,15 +81,16 @@ datamodule:
   val_dataset: ${val_dataset}
   test_dataset: ${test_dataset}
   batch_size: 256
-  num_workers: 0
+  #num_workers: 8   # More workers for cluster
+  max_positions: 128  # Should match model.max_len
   enable_position_shifting: true  # Enable position shifting for length generalization
 
 callbacks:
   early_stopping:
     _target_: lightning.pytorch.callbacks.EarlyStopping
     monitor: val_exact_match
-    min_delta: 0.001
-    patience: 5
+    min_delta: 0.0  # No minimum improvement required
+    patience: 999999  # Effectively disable patience-based stopping
     mode: max
     verbose: True
     stopping_threshold: 0.99  # Stop when validation accuracy reaches 99%
@@ -98,7 +100,7 @@ callbacks:
     mode: max
     save_top_k: 1
     save_last: False
-    filename: "synthetic_count_adam_{epoch:02d}_{val_exact_match:.3f}"
+    filename: "synthetic_count_randomgreedy_{epoch:02d}_{val_exact_match:.3f}"
     dirpath: ${save_dir}/checkpoints
     verbose: True
     auto_insert_metric_name: False
