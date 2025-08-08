@@ -406,6 +406,83 @@ class NelderMead(HelperOptimizer):
         self.restore_parameters(self.simplex[0][0])
 
 
+class RandomGreedySearch(HelperOptimizer):
+    """
+    Random Greedy Search optimizer that adds Gaussian noise to parameters.
+    If the noised solution improves training loss, it's accepted as a new starting point.
+    If no solution is found after max_steps, sigma is decreased by decay_factor.
+    """
+    def __init__(self, params, **kwargs):
+        super(RandomGreedySearch, self).__init__(params, **kwargs)
+        self.sigma = kwargs.get('sigma', 1.0)  # Initial noise standard deviation
+        self.max_steps_per_sigma = kwargs.get('max_steps_per_sigma', 30000)  # Steps before reducing sigma
+        self.decay_factor = kwargs.get('decay_factor', 2.0)  # Factor to reduce sigma by
+        self.min_sigma = kwargs.get('min_sigma', 1e-6)  # Minimum sigma threshold
+        
+        self.best_loss = None
+        self.steps_since_improvement = 0
+        self.total_steps = 0
+        self.accepted_steps = 0
+        
+    def step(self, closure):
+        """
+        Perform one step of Random Greedy Search:
+        1. Add Gaussian noise with current sigma
+        2. Evaluate loss
+        3. Accept if better, otherwise revert
+        4. If no improvement after max_steps_per_sigma, reduce sigma
+        """
+        self.total_steps += 1
+        
+        # Initialize best loss on first step
+        if self.best_loss is None:
+            self.best_loss = closure().detach().clone()
+            self.save_parameters("best_params")
+            return
+            
+        # Always start from the best known parameters
+        self.restore_parameters("best_params")
+        
+        # Add Gaussian noise with current sigma using the inherited add_noise method
+        self.add_noise(self.sigma)
+        
+        # Evaluate new loss
+        new_loss = closure()
+        
+        # Check if improvement
+        if new_loss < self.best_loss:
+            # Accept the new parameters - they're already set, just update best
+            self.best_loss = new_loss.detach().clone()
+            self.save_parameters("best_params")  # Save the new best parameters
+            self.accepted_steps += 1
+            self.steps_since_improvement = 0
+        else:
+            # Revert to best parameters (reject the noise)
+            self.restore_parameters("best_params")
+            self.steps_since_improvement += 1
+            
+        # Check if we need to reduce sigma
+        if self.steps_since_improvement >= self.max_steps_per_sigma:
+            old_sigma = self.sigma
+            self.sigma /= self.decay_factor
+            self.steps_since_improvement = 0
+            
+            if self.sigma < self.min_sigma:
+                print(f"RandomGreedySearch: Minimum sigma {self.min_sigma} reached. Stopping.")
+                return
+                
+            print(f"RandomGreedySearch: No improvement for {self.max_steps_per_sigma} steps. "
+                  f"Reducing sigma from {old_sigma:.6f} to {self.sigma:.6f}")
+            
+        # Log progress frequently for debugging
+        if self.total_steps <= 100 or self.total_steps % 500 == 0:
+            acceptance_rate = self.accepted_steps / self.total_steps if self.total_steps > 0 else 0
+            print(f"RandomGreedySearch Step {self.total_steps}: "
+                  f"Best loss = {self.best_loss:.6f}, "
+                  f"Current loss = {new_loss:.6f}, "
+                  f"Sigma = {self.sigma:.6f}, "
+                  f"Acceptance rate = {acceptance_rate:.3f}, "
+                  f"Steps since improvement = {self.steps_since_improvement}")
 
 
 

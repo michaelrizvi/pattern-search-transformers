@@ -2,20 +2,20 @@ defaults:
   - hydra: default
   - _self_
 
-save_dir: "logs/synthetic_count_patternsearch/"
+save_dir: "logs/synthetic_count_randomgreedy/"
 seed: 42
 
 logger:
   _target_: lightning.pytorch.loggers.WandbLogger
   entity: null  # Add your wandb entity here
-  project: "pattern-search-synthetic-sequences"  # Add your wandb project here
-  name: "synthetic_count_patternsearch_${now:%Y-%m-%d}_${now:%H-%M-%S}"
+  project: "random-greedy-synthetic-sequences"  # Add your wandb project here
+  name: "synthetic_count_randomgreedy_${now:%Y-%m-%d}_${now:%H-%M-%S}"
   save_dir: ${save_dir}
   offline: False  # Set to False if you want to log to wandb online
-  tags: ["pattern_search", "transformer", "synthetic_sequences", "count", "tiny"]
+  tags: ["random_greedy", "transformer", "synthetic_sequences", "count", "tiny"]
 
 trainer:
-  max_epochs: 100  # Multiple epochs for pre-generated data
+  max_epochs: 1000  # Multiple epochs for pre-generated data
   enable_progress_bar: True
   log_every_n_steps: 1
   check_val_every_n_epoch: 20  # Validate every 20 epochs
@@ -24,7 +24,7 @@ trainer:
   limit_train_batches: null
   limit_val_batches: null
 
-# Tiny transformer model for counting task - same as Adam config
+# Tiny transformer model for counting task - same as other configs
 model:
   _target_: transformer.DecoderOnlyTransformer
   vocab_size: 110  # 0-9 (vocab) + 102 (sep) + 103 (pad) + extra room
@@ -36,11 +36,13 @@ model:
   dropout: 0.1
 
 task:
-  _target_: pattern_search_task.PatternSearchTask
+  _target_: random_greedy_task.RandomGreedyTask
   model: ${model}
   pad_token_id: 103
   sep_token_id: 102
-  pattern_search_radius: 1  # Small radius for tiny model and simple task
+  sigma: 0.2  # Much smaller initial noise for tiny model
+  max_steps_per_sigma: 5000  # Reduce steps before sigma decay for faster adaptation
+  decay_factor: 2.0  # Factor to reduce sigma by
 
 # Pre-generated COUNT dataset - same as Adam config
 train_dataset:
@@ -79,7 +81,7 @@ datamodule:
   val_dataset: ${val_dataset}
   test_dataset: ${test_dataset}
   batch_size: 256
-  num_workers: 0   # Same as Adam config
+  num_workers: 0   # More workers for cluster
   max_positions: 128  # Should match model.max_len
   enable_position_shifting: true  # Enable position shifting for length generalization
 
@@ -88,7 +90,7 @@ callbacks:
     _target_: lightning.pytorch.callbacks.EarlyStopping
     monitor: val_exact_match
     min_delta: 0.001
-    patience: 3  # Shorter patience for PatternSearch
+    patience: 5  # Patience for Random Greedy Search
     mode: max
     verbose: True
     stopping_threshold: 0.99  # Stop when validation accuracy reaches 99%
@@ -98,7 +100,7 @@ callbacks:
     mode: max
     save_top_k: 1
     save_last: False
-    filename: "synthetic_count_patternsearch_{epoch:02d}_{val_exact_match:.3f}"
+    filename: "synthetic_count_randomgreedy_{epoch:02d}_{val_exact_match:.3f}"
     dirpath: ${save_dir}/checkpoints
     verbose: True
     auto_insert_metric_name: False

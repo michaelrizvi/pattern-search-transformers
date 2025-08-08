@@ -11,14 +11,14 @@ logger:
   project: "adam-synthetic-sequences"  # Add your wandb project here
   name: "synthetic_count_adam_${now:%Y-%m-%d}_${now:%H-%M-%S}"
   save_dir: ${save_dir}
-  offline: True  # Set to False if you want to log to wandb online
+  offline: False  # Set to False if you want to log to wandb online
   tags: ["adam", "transformer", "synthetic_sequences", "count", "tiny"]
 
 trainer:
-  max_epochs: 1
+  max_epochs: 100  # Multiple epochs for pre-generated data
   enable_progress_bar: True
   log_every_n_steps: 1
-  val_check_interval: 200  # More frequent validation for counting task
+  check_val_every_n_epoch: 20  # Validate every epoch
   accelerator: "auto"
   devices: 1
   limit_train_batches: null
@@ -43,33 +43,36 @@ task:
   learning_rate: 1e-4  # Slightly higher LR for tiny model
   weight_decay: 0.01   # AdamW weight decay
 
-# COUNT dataset - train on ranges 1-5, test on ranges 5-10
+# Pre-generated COUNT dataset - train on ranges 1-5, test on ranges 5-9
 train_dataset:
-  _target_: synthetic_seq_data.CountSequenceDataset
-  n_samples: 200000
+  _target_: synthetic_seq_data.PreGeneratedCountSequenceDataset
+  n_samples: 5000    # Smaller for pre-generated data
   min_range_size: 1    # Count ranges like [3,3] (single number)
-  max_range_size: 5    # Count ranges like [2,7] (5 numbers)
-  vocab_size: 10       # Use integers 0-9
+  max_range_size: 20    # Count ranges like [2,7] (5 numbers)
+  vocab_size: 40       # Use integers 0-9
   sep_token: 102
   pad_token: 103
+  seed: 42            # Reproducible data
 
 val_dataset:
-  _target_: synthetic_seq_data.CountSequenceDataset
+  _target_: synthetic_seq_data.PreGeneratedCountSequenceDataset
   n_samples: 1000
   min_range_size: 1    # Same distribution as training
-  max_range_size: 5    # Same distribution as training
-  vocab_size: 10       # Use integers 0-9
+  max_range_size: 20    # Same distribution as training
+  vocab_size: 40       # Use integers 0-9
   sep_token: 102
   pad_token: 103
+  seed: 123           # Different seed for validation
 
 test_dataset:
-  _target_: synthetic_seq_data.CountSequenceDataset
-  n_samples: 500
-  min_range_size: 5    # Longer ranges for generalization test
-  max_range_size: 9    # Test generalization to longer counting
-  vocab_size: 10       # Use integers 0-9
+  _target_: synthetic_seq_data.PreGeneratedCountSequenceDataset
+  n_samples: 1000
+  min_range_size: 20    # Longer ranges for generalization test
+  max_range_size: 39    # Test generalization to longer counting
+  vocab_size: 40       # Use integers 0-9
   sep_token: 102
   pad_token: 103
+  seed: 456           # Different seed for test
 
 datamodule:
   _target_: synthetic_seq_data.SyntheticSequenceDataModule

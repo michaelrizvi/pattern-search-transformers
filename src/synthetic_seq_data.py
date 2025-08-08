@@ -125,6 +125,133 @@ class SyntheticSequenceDataset(Dataset):
         return full_seq
 
 
+class PreGeneratedSortSequenceDataset(Dataset):
+    """
+    Pre-generated dataset for sorting task. All sequences are generated at initialization.
+    This is more efficient than on-the-fly generation and ensures consistent data.
+    """
+    
+    def __init__(
+        self,
+        n_samples: int,
+        min_seq_len: int,
+        max_seq_len: int,
+        vocab_size: int,
+        sep_token: int = 102,
+        pad_token: int = 103,
+        seed: int = 42,
+    ):
+        super().__init__()
+        self.n_samples = n_samples
+        self.min_seq_len = min_seq_len
+        self.max_seq_len = max_seq_len
+        self.vocab_size = vocab_size
+        self.sep_token = sep_token
+        self.pad_token = pad_token
+        self.seed = seed
+        
+        # Pre-generate all sequences
+        self.sequences = []
+        self._generate_data()
+
+    def _generate_data(self):
+        """Generate all sequences at initialization time."""
+        # Set seed for reproducible data generation
+        torch.manual_seed(self.seed)
+        random.seed(self.seed)
+        
+        for _ in range(self.n_samples):
+            # Sample sequence length uniformly
+            seq_len = torch.randint(self.min_seq_len, self.max_seq_len + 1, (1,)).item()
+            
+            # Sample random sequence from vocab
+            input_seq = torch.randint(0, self.vocab_size, (seq_len,))
+            
+            # Apply sorting function
+            output_seq = sort_fn(input_seq)
+            
+            # Create full sequence: [input] + [sep_token] + [output]
+            full_seq = torch.cat([
+                input_seq,
+                torch.tensor([self.sep_token]),
+                output_seq
+            ])
+            
+            self.sequences.append(full_seq)
+
+    def __len__(self) -> int:
+        return self.n_samples
+
+    def __getitem__(self, index) -> torch.Tensor:
+        return self.sequences[index]
+
+
+class PreGeneratedCountSequenceDataset(Dataset):
+    """
+    Pre-generated dataset for COUNT task. All sequences are generated at initialization.
+    This is more efficient than on-the-fly generation and ensures consistent data.
+    """
+    
+    def __init__(
+        self,
+        n_samples: int,
+        min_range_size: int = 1,
+        max_range_size: int = 10,
+        vocab_size: int = 20,
+        sep_token: int = 102,
+        pad_token: int = 103,
+        seed: int = 42,
+    ):
+        super().__init__()
+        self.n_samples = n_samples
+        self.min_range_size = min_range_size
+        self.max_range_size = max_range_size
+        self.vocab_size = vocab_size
+        self.sep_token = sep_token
+        self.pad_token = pad_token
+        self.seed = seed
+        
+        # Pre-generate all sequences
+        self.sequences = []
+        self._generate_data()
+
+    def _generate_data(self):
+        """Generate all sequences at initialization time."""
+        # Set seed for reproducible data generation
+        torch.manual_seed(self.seed)
+        random.seed(self.seed)
+        
+        for _ in range(self.n_samples):
+            # Sample range size uniformly
+            range_size = torch.randint(self.min_range_size, self.max_range_size + 1, (1,)).item()
+            
+            # Sample min_val ensuring max_val stays within vocab_size
+            max_possible_min = self.vocab_size - range_size
+            min_val = torch.randint(0, max_possible_min, (1,)).item()
+            max_val = min_val + range_size
+            
+            # Create input sequence [min_val, max_val]
+            input_seq = torch.tensor([min_val, max_val])
+            
+            # Apply count function
+            output_seq = count_fn(input_seq)
+            
+            # Create full sequence: [min_val, max_val] + [sep_token] + [output]
+            full_seq = torch.cat([
+                input_seq,
+                torch.tensor([self.sep_token]),
+                output_seq
+            ])
+            
+            self.sequences.append(full_seq)
+
+    def __len__(self) -> int:
+        return self.n_samples
+
+    def __getitem__(self, index) -> torch.Tensor:
+        return self.sequences[index]
+
+
 class CountSequenceDataset(Dataset):
     """
     Dataset for COUNT task: given [min_val, max_val], generate sequence from min to max.

@@ -1,3 +1,14 @@
+import os
+import warnings
+
+# Suppress OpenSSL and SSL warnings
+os.environ['PYTHONHTTPSVERIFY'] = '0'
+os.environ['CURL_CA_BUNDLE'] = ''
+warnings.filterwarnings('ignore', category=UserWarning, module='torch.*')
+warnings.filterwarnings('ignore', message='.*SSL.*')
+warnings.filterwarnings('ignore', message='.*certificate.*')
+warnings.filterwarnings('ignore', message='.*urllib3.*')
+
 import hydra
 import torch
 from lightning import Trainer, seed_everything
